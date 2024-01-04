@@ -1091,8 +1091,14 @@ void ShaderGraph::optimize(GenContext& context)
             }
         }
 
-        _nodeOrder.resize(usedNodes.size());
-        _nodeOrder.assign(usedNodes.begin(), usedNodes.end());
+        _nodeOrder.erase(
+            std::remove_if(
+                    _nodeOrder.begin(), _nodeOrder.end(),
+                    [&](ShaderNode* node)
+                    {
+                        return usedNodes.count(node) == 0;
+                    }),
+                    _nodeOrder.end());
     }
 }
 
