@@ -67,6 +67,9 @@
     <input name="tangent" type="vector3" defaultgeomprop="Tworld" />
     <input name="distribution" type="string" value="ggx" enum="ggx" uniform="true" />
     <input name="scatter_mode" type="string" value="R" enum="R,T,RT" uniform="true" />
+    <input name="sigmaA" type="vector3" value="0.0, 0.0, 0.0" />
+    <input name="sigmaS" type="vector3" value="0.0, 0.0, 0.0" />
+    <input name="meancosine" type="float" value="0.0" />
     <output name="out" type="BSDF" />
   </nodedef>
 
