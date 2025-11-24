@@ -236,7 +236,7 @@ void ShaderGraph::addDefaultGeomNode(ShaderInput* input, const GeomPropDef& geom
             ShaderInput* indexInput = geomNode->getInput("index");
             if (indexInput)
             {
-                indexInput->setValue(Value::createValue<string>(index));
+                indexInput->setValue(Value::createValue(fromValueString<int>(index)));
                 indexInput->setPath(namePath);
             }
         }
