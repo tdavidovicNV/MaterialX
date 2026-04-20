@@ -134,7 +134,7 @@ class MX_CORE_API Value
 };
 
 /// The class template for typed subclasses of Value
-template <class T> class MX_CORE_API TypedValue : public Value
+template <class T> class TypedValue : public Value
 {
   public:
     TypedValue() :
@@ -216,7 +216,37 @@ template <class T> MX_CORE_API string toValueString(const T& data);
 /// @throws ExceptionTypeError if the conversion cannot be performed.
 template <class T> MX_CORE_API T fromValueString(const string& value);
 
+/// Declare explicit specializations of TypedValue members before any
+/// implicit instantiation can occur (required by clang).
+#define DECLARE_TYPED_VALUE_SPECIALIZATION(T)                                    \
+    template <> MX_CORE_API const string TypedValue<T>::TYPE;                    \
+    template <> MX_CORE_API const string& TypedValue<T>::getTypeString() const;  \
+    template <> MX_CORE_API string TypedValue<T>::getValueString() const;
+
+DECLARE_TYPED_VALUE_SPECIALIZATION(int)
+DECLARE_TYPED_VALUE_SPECIALIZATION(bool)
+DECLARE_TYPED_VALUE_SPECIALIZATION(float)
+DECLARE_TYPED_VALUE_SPECIALIZATION(Color3)
+DECLARE_TYPED_VALUE_SPECIALIZATION(Color4)
+DECLARE_TYPED_VALUE_SPECIALIZATION(Vector2)
+DECLARE_TYPED_VALUE_SPECIALIZATION(Vector3)
+DECLARE_TYPED_VALUE_SPECIALIZATION(Vector4)
+DECLARE_TYPED_VALUE_SPECIALIZATION(Matrix33)
+DECLARE_TYPED_VALUE_SPECIALIZATION(Matrix44)
+DECLARE_TYPED_VALUE_SPECIALIZATION(string)
+DECLARE_TYPED_VALUE_SPECIALIZATION(IntVec)
+DECLARE_TYPED_VALUE_SPECIALIZATION(BoolVec)
+DECLARE_TYPED_VALUE_SPECIALIZATION(FloatVec)
+DECLARE_TYPED_VALUE_SPECIALIZATION(StringVec)
+DECLARE_TYPED_VALUE_SPECIALIZATION(long)
+DECLARE_TYPED_VALUE_SPECIALIZATION(double)
+
+#undef DECLARE_TYPED_VALUE_SPECIALIZATION
+
 /// Forward declaration of specific template instantiations.
+/// When building the library, explicit instantiation is handled in Value.cpp
+/// after the member specializations (required by clang).
+#ifndef MATERIALX_CORE_EXPORTS
 /// Base types
 MX_CORE_EXTERN_TEMPLATE(TypedValue<int>);
 MX_CORE_EXTERN_TEMPLATE(TypedValue<bool>);
@@ -239,6 +269,7 @@ MX_CORE_EXTERN_TEMPLATE(TypedValue<StringVec>);
 /// Alias types
 MX_CORE_EXTERN_TEMPLATE(TypedValue<long>);
 MX_CORE_EXTERN_TEMPLATE(TypedValue<double>);
+#endif
 
 MATERIALX_NAMESPACE_END
 
