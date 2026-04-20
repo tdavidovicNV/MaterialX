@@ -257,11 +257,16 @@ void PortElement::makeCompatible(const string& connectionType) const
     if(getRoot()->getAttribute("relax_type_safety") != "enabled")
         return;
 
-    size_t count = CHANNELS_PATTERN_LENGTH.at(getType());
-    const std::vector<char>& srcChars = CHANNELS_CHARACTER_VECTOR.at(connectionType);
+    auto dstCountIt = CHANNELS_PATTERN_LENGTH.find(getType());
+    if (dstCountIt == CHANNELS_PATTERN_LENGTH.end())
+        return;
+
+    auto srcCharsIt = CHANNELS_CHARACTER_VECTOR.find(connectionType);
+    if (srcCharsIt == CHANNELS_CHARACTER_VECTOR.end())
+        return;
     string channels;
-    for (size_t i = 0; i < count; ++i)
-        channels.push_back(srcChars[i]);
+    for (size_t i = 0; i < dstCountIt->second; ++i)
+        channels.push_back(srcCharsIt->second[i]);
     const_cast<PortElement*>(this)->setChannels(channels);
 }
 
