@@ -273,6 +273,7 @@ template <class T> class ValueRegistry
     template <> const string TypedValue<T>::TYPE = name;                                         \
     template <> const string& TypedValue<T>::getTypeString() const { return TYPE; }              \
     template <> string TypedValue<T>::getValueString() const { return toValueString<T>(_data); } \
+    template class MX_CORE_API TypedValue<T>;                                                    \
     template MX_CORE_API bool Value::isA<T>() const;                                             \
     template MX_CORE_API const T& Value::asA<T>() const;                                         \
     template MX_CORE_API const string& getTypeString<T>();                                       \
