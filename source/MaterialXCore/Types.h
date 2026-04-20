@@ -589,19 +589,6 @@ template <class M, class S, size_t N> class MatrixN : public MatrixBase
     std::array<RowArray, N> _arr;
 };
 
-// Forward declarations.
-class Matrix33;
-class Matrix44;
-
-// Declare explicit specializations before derived class definitions
-// cause implicit instantiation (required by clang).
-template <> Matrix33 MatrixN<Matrix33, float, 3>::getTranspose() const;
-template <> float MatrixN<Matrix33, float, 3>::getDeterminant() const;
-template <> Matrix33 MatrixN<Matrix33, float, 3>::getAdjugate() const;
-template <> Matrix44 MatrixN<Matrix44, float, 4>::getTranspose() const;
-template <> float MatrixN<Matrix44, float, 4>::getDeterminant() const;
-template <> Matrix44 MatrixN<Matrix44, float, 4>::getAdjugate() const;
-
 /// @class Matrix33
 /// A 3x3 matrix of floating-point values.
 ///
