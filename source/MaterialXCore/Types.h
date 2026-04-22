@@ -372,6 +372,9 @@ class MX_CORE_API Color4 : public VectorN<Color4, float, 4>
 /// The base class for square matrices of scalar values
 class MatrixBase { };
 
+class Matrix33;
+class Matrix44;
+
 /// The class template for square matrices of scalar values.  Inherited by
 /// Matrix33 and Matrix44.
 ///
@@ -538,21 +541,6 @@ template <class M, class S, size_t N> class MatrixN : public MatrixBase
         return *this;
     }
 
-    /// Return the transpose of the matrix.
-    M getTranspose() const;
-
-    /// Return the determinant of the matrix.
-    S getDeterminant() const;
-
-    /// Return the adjugate of the matrix.
-    M getAdjugate() const;
-
-    /// Return the inverse of the matrix.
-    M getInverse() const
-    {
-        return getAdjugate() / getDeterminant();
-    }
-
     /// @}
     /// @name Iterators
     /// @{
@@ -609,6 +597,26 @@ class MX_CORE_API Matrix33 : public MatrixN<Matrix33, float, 3>
                  m20, m21, m22 };
     }
 
+    /// @name Matrix Operations
+    /// @{
+
+    /// Return the transpose of the matrix.
+    Matrix33 getTranspose() const;
+
+    /// Return the determinant of the matrix.
+    float getDeterminant() const;
+
+    /// Return the adjugate of the matrix.
+    Matrix33 getAdjugate() const;
+
+    /// Return the inverse of the matrix.
+    Matrix33 getInverse() const
+    {
+        return getAdjugate() / getDeterminant();
+    }
+
+    /// @}
+
     /// @name Vector Transformations
     /// @{
 
@@ -661,6 +669,26 @@ class MX_CORE_API Matrix44 : public MatrixN<Matrix44, float, 4>
                  m20, m21, m22, m23,
                  m30, m31, m32, m33 };
     }
+
+    /// @name Matrix Operations
+    /// @{
+
+    /// Return the transpose of the matrix.
+    Matrix44 getTranspose() const;
+
+    /// Return the determinant of the matrix.
+    float getDeterminant() const;
+
+    /// Return the adjugate of the matrix.
+    Matrix44 getAdjugate() const;
+
+    /// Return the inverse of the matrix.
+    Matrix44 getInverse() const
+    {
+        return getAdjugate() / getDeterminant();
+    }
+
+    /// @}
 
     /// @name Vector Transformations
     /// @{
