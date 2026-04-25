@@ -11,7 +11,7 @@
 include(CMakeFindDependencyMacro)
 
 # Gather MaterialX targets:
-include("${CMAKE_CURRENT_LIST_DIR}/@CMAKE_PROJECT_NAME@Targets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/@MATERIALX_PACKAGE_NAME@Targets.cmake")
 
 # Resource paths:
 # MATERIALX_BASE_DIR         MaterialX root installation directory
@@ -47,6 +47,6 @@ if(UNIX AND NOT APPLE)
     endif()
 endif()
 
-check_required_components(@CMAKE_PROJECT_NAME@)
+check_required_components(@MATERIALX_PACKAGE_NAME@)
 
 @EXPORT_ALIASES@

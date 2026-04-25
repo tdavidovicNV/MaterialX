@@ -182,6 +182,10 @@ message(STATUS "Setting namespace to '${MATERIALX_NAMESPACE}'")
 # This helps an application that needs to ship a dynamic library MaterialX ensure
 # that it has a unique name that won't conflict with one elsewhere on the system.
 set(MATERIALX_LIBNAME_SUFFIX "" CACHE STRING "Specify a suffix to all libraries that are built")
+set(MATERIALX_TARGET_PREFIX "" CACHE STRING "Specify a prefix for all CMake build target names")
+set(MATERIALX_TARGET_NAMESPACE "" CACHE STRING "Specify a namespace for generated ALIAS targets")
+set(MATERIALX_EXPORT_SET_NAME "MaterialX" CACHE STRING "Specify the install(EXPORT ...) set name")
+set(MATERIALX_PACKAGE_NAME "${PROJECT_NAME}" CACHE STRING "Specify the generated CMake package/config name")
 
 mark_as_advanced(MATERIALX_BUILD_DOCS)
 mark_as_advanced(MATERIALX_BUILD_GEN_GLSL)
@@ -202,6 +206,10 @@ mark_as_advanced(MATERIALX_BUILD_MONOLITHIC)
 mark_as_advanced(MATERIALX_BUILD_USE_CCACHE)
 mark_as_advanced(MATERIALX_NAMESPACE_SUFFIX)
 mark_as_advanced(MATERIALX_LIBNAME_SUFFIX)
+mark_as_advanced(MATERIALX_TARGET_PREFIX)
+mark_as_advanced(MATERIALX_TARGET_NAMESPACE)
+mark_as_advanced(MATERIALX_EXPORT_SET_NAME)
+mark_as_advanced(MATERIALX_PACKAGE_NAME)
 mark_as_advanced(MATERIALX_PYTHON_LTO)
 mark_as_advanced(MATERIALX_INSTALL_PYTHON)
 mark_as_advanced(MATERIALX_INSTALL_RESOURCES)
@@ -400,6 +408,14 @@ function(assign_source_group prefix)
     endforeach()
 endfunction(assign_source_group)
 
+function(mx_get_target_name output_var materialx_module_name)
+    if(MATERIALX_TARGET_PREFIX STREQUAL "")
+        set(${output_var} ${materialx_module_name} PARENT_SCOPE)
+    else()
+        set(${output_var} ${MATERIALX_TARGET_PREFIX}${materialx_module_name} PARENT_SCOPE)
+    endif()
+endfunction()
+
 function(mx_add_library MATERIALX_MODULE_NAME)
     set(options ADD_OBJECTIVE_C_CODE SKIP_INSTALL)
     set(oneValueArgs EXPORT_DEFINE)
@@ -425,8 +441,14 @@ function(mx_add_library MATERIALX_MODULE_NAME)
     assign_source_group("Source Files" ${args_INLINED_FILES})
     assign_source_group("Header Files" ${args_HEADER_FILES})
 
+    set(mapped_mtlx_modules)
+    foreach(module ${args_MTLX_MODULES})
+        mx_get_target_name(mapped_module ${module})
+        list(APPEND mapped_mtlx_modules ${mapped_module})
+    endforeach()
+
     if (NOT MATERIALX_BUILD_MONOLITHIC)
-        set(TARGET_NAME ${MATERIALX_MODULE_NAME})
+        mx_get_target_name(TARGET_NAME ${MATERIALX_MODULE_NAME})
         add_library(${TARGET_NAME})
 
         # Create version resource
@@ -437,7 +459,7 @@ function(mx_add_library MATERIALX_MODULE_NAME)
 
         target_link_libraries(${TARGET_NAME}
             PUBLIC
-            ${args_MTLX_MODULES}
+            ${mapped_mtlx_modules}
             ${CMAKE_DL_LIBS})
 
         target_include_directories(${TARGET_NAME}
@@ -457,10 +479,15 @@ function(mx_add_library MATERIALX_MODULE_NAME)
             SOVERSION "${MATERIALX_MAJOR_VERSION}")
     else()
         set(TARGET_NAME ${MATERIALX_MONOLITHIC_TARGET})
-        add_library(${MATERIALX_MODULE_NAME} ALIAS ${MATERIALX_MONOLITHIC_TARGET})
+        mx_get_target_name(MATERIALX_MODULE_TARGET ${MATERIALX_MODULE_NAME})
+        add_library(${MATERIALX_MODULE_TARGET} ALIAS ${MATERIALX_MONOLITHIC_TARGET})
 
         # Store the aliased MaterialX modules name to create CMake export aliases later.
-        set_property(GLOBAL APPEND PROPERTY MATERIALX_MODULES ${MATERIALX_MODULE_NAME})
+        set_property(GLOBAL APPEND PROPERTY MATERIALX_MODULES ${MATERIALX_MODULE_TARGET})
+    endif()
+
+    if(NOT MATERIALX_TARGET_NAMESPACE STREQUAL "")
+        add_library(${MATERIALX_TARGET_NAMESPACE}${MATERIALX_MODULE_NAME} ALIAS ${TARGET_NAME})
     endif()
 
     set_target_properties(${TARGET_NAME} PROPERTIES CXX_VISIBILITY_PRESET hidden)
@@ -488,8 +515,8 @@ function(mx_add_library MATERIALX_MODULE_NAME)
 
     if(NOT SKBUILD AND NOT args_SKIP_INSTALL)
         if(NOT MATERIALX_BUILD_MONOLITHIC)
-            install(TARGETS ${MATERIALX_MODULE_NAME}
-                    EXPORT MaterialX
+            install(TARGETS ${TARGET_NAME}
+                    EXPORT ${MATERIALX_EXPORT_SET_NAME}
                     ARCHIVE DESTINATION ${MATERIALX_INSTALL_LIB_PATH}
                     LIBRARY DESTINATION ${MATERIALX_INSTALL_LIB_PATH}
                     RUNTIME DESTINATION ${MATERIALX_INSTALL_BIN_PATH}
@@ -498,10 +525,10 @@ function(mx_add_library MATERIALX_MODULE_NAME)
 
         if(MSVC)
             if(MATERIALX_BUILD_SHARED_LIBS)
-                install(FILES $<TARGET_PDB_FILE:${MATERIALX_MODULE_NAME}>
+                install(FILES $<TARGET_PDB_FILE:${TARGET_NAME}>
                         DESTINATION ${MATERIALX_INSTALL_BIN_PATH} OPTIONAL)
             else()
-                install(FILES "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<CONFIG>/$<TARGET_FILE_BASE_NAME:${MATERIALX_MODULE_NAME}>.pdb"
+                install(FILES "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/$<CONFIG>/$<TARGET_FILE_BASE_NAME:${TARGET_NAME}>.pdb"
                         DESTINATION ${MATERIALX_INSTALL_LIB_PATH} OPTIONAL)
             endif()
         endif()
@@ -520,7 +547,7 @@ endif()
 
 # Build a monolithic target - needs to be added before the other build targets that may be included.
 if (MATERIALX_BUILD_MONOLITHIC)
-    set(MATERIALX_MONOLITHIC_TARGET MaterialX)
+    mx_get_target_name(MATERIALX_MONOLITHIC_TARGET MaterialX)
     add_subdirectory(source)
 endif()
 
@@ -621,7 +648,7 @@ if(MATERIALX_BUILD_MONOLITHIC)
     # modules to ensure the correct files are in mxHeaders
     if(NOT SKBUILD)
         install(TARGETS ${MATERIALX_MONOLITHIC_TARGET}
-                EXPORT MaterialX
+            EXPORT ${MATERIALX_EXPORT_SET_NAME}
                 ARCHIVE DESTINATION ${MATERIALX_INSTALL_LIB_PATH}
                 LIBRARY DESTINATION ${MATERIALX_INSTALL_LIB_PATH}
                 RUNTIME DESTINATION ${MATERIALX_INSTALL_BIN_PATH}
@@ -664,7 +691,7 @@ endif()
 if(NOT SKBUILD)
     install(FILES LICENSE CHANGELOG.md README.md THIRD-PARTY.md DESTINATION .)
 
-    set(MATERIALX_GEN_CONFIG_PATH "${MATERIALX_INSTALL_LIB_PATH}/cmake/${CMAKE_PROJECT_NAME}")
+    set(MATERIALX_GEN_CONFIG_PATH "${MATERIALX_INSTALL_LIB_PATH}/cmake/${MATERIALX_PACKAGE_NAME}")
 
     include(CMakePackageConfigHelpers)
 
@@ -674,7 +701,7 @@ if(NOT SKBUILD)
         get_property(MATERIALX_MODULES GLOBAL PROPERTY MATERIALX_MODULES)
         set(EXPORT_ALIASES "# Aliased targets for the monolithic build\n")
         foreach (MODULE ${MATERIALX_MODULES})
-            string(APPEND EXPORT_ALIASES "add_library(${MODULE} ALIAS MaterialX)\n")
+            string(APPEND EXPORT_ALIASES "add_library(${MODULE} ALIAS ${MATERIALX_MONOLITHIC_TARGET})\n")
         endforeach ()
 
         if (NOT MATERIALX_MODULES)
@@ -683,19 +710,19 @@ if(NOT SKBUILD)
     endif()
 
     configure_package_config_file(cmake/modules/MaterialXConfig.cmake.in
-                                  ${PROJECT_BINARY_DIR}/cmake/${CMAKE_PROJECT_NAME}Config.cmake
+                      ${PROJECT_BINARY_DIR}/cmake/${MATERIALX_PACKAGE_NAME}Config.cmake
                                   INSTALL_DESTINATION "${MATERIALX_GEN_CONFIG_PATH}"
-                                  PATH_VARS CMAKE_INSTALL_PREFIX CMAKE_PROJECT_NAME)
-    write_basic_package_version_file(${PROJECT_BINARY_DIR}/cmake/${CMAKE_PROJECT_NAME}ConfigVersion.cmake
+                      PATH_VARS CMAKE_INSTALL_PREFIX)
+        write_basic_package_version_file(${PROJECT_BINARY_DIR}/cmake/${MATERIALX_PACKAGE_NAME}ConfigVersion.cmake
                                      VERSION ${MATERIALX_LIBRARY_VERSION}
                                      COMPATIBILITY AnyNewerVersion)
 
     # Install auto-generated CMake configuration files
-    install(EXPORT MaterialX
+        install(EXPORT ${MATERIALX_EXPORT_SET_NAME}
             DESTINATION "${MATERIALX_GEN_CONFIG_PATH}"
-            FILE ${CMAKE_PROJECT_NAME}Targets.cmake)
-    install(FILES "${PROJECT_BINARY_DIR}/cmake/${CMAKE_PROJECT_NAME}ConfigVersion.cmake"
-            "${PROJECT_BINARY_DIR}/cmake/${CMAKE_PROJECT_NAME}Config.cmake"
+            FILE ${MATERIALX_PACKAGE_NAME}Targets.cmake)
+        install(FILES "${PROJECT_BINARY_DIR}/cmake/${MATERIALX_PACKAGE_NAME}ConfigVersion.cmake"
+            "${PROJECT_BINARY_DIR}/cmake/${MATERIALX_PACKAGE_NAME}Config.cmake"
             DESTINATION "${MATERIALX_GEN_CONFIG_PATH}")
 endif()
 
