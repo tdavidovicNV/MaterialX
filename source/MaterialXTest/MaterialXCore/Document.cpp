@@ -121,6 +121,37 @@ TEST_CASE("Document", "[document]")
     REQUIRE(doc->validate());
 }
 
+TEST_CASE("Document version upgrade", "[document]")
+{
+    const std::string xmlString =
+        "<?xml version=\"1.0\"?>"
+        "<materialx version=\"1.38\">"
+        "  <nodedef name=\"ND_test\" node=\"test\">"
+        "    <input name=\"in\" type=\"color3\" value=\"0.5, 0.5, 0.5\" />"
+        "    <output name=\"out\" type=\"color3\" />"
+        "  </nodedef>"
+        "  <nodegraph name=\"NG_test\" nodedef=\"ND_test\">"
+        "    <output name=\"out\" type=\"color3\" nodename=\"constant1\" />"
+        "    <constant name=\"constant1\" type=\"color3\">"
+        "      <input name=\"value\" type=\"color3\" value=\"1, 1, 1\" interfacename=\"in\" />"
+        "    </constant>"
+        "  </nodegraph>"
+        "</materialx>";
+
+    mx::DocumentPtr doc = mx::createDocument();
+    mx::readFromXmlString(doc, xmlString);
+
+    mx::InputPtr input = doc->getNodeGraph("NG_test")->getNode("constant1")->getInput("value");
+    REQUIRE(input);
+    REQUIRE(input->hasInterfaceName());
+    REQUIRE(!input->hasValue());
+    REQUIRE(doc->getVersionIntegers() == std::make_pair(1, 39));
+
+    std::string message;
+    INFO(message);
+    REQUIRE(doc->validate(&message));
+}
+
 TEST_CASE("Document equivalence", "[document]")
 {
     mx::DocumentPtr doc = mx::createDocument();
