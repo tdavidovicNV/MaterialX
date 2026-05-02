@@ -58,6 +58,151 @@ void copyInputWithBindings(NodePtr sourceNode, const string& sourceInputName,
     }
 }
 
+bool inputHasBinding(InputPtr input)
+{
+    return input->hasValue() ||
+           input->hasNodeName() ||
+           input->hasNodeGraphString() ||
+           input->hasInterfaceName() ||
+           input->hasOutputString();
+}
+
+void removeInputIfPresent(NodePtr node, const string& inputName)
+{
+    if (node->getInput(inputName))
+    {
+        node->removeInput(inputName);
+    }
+}
+
+void migrateGltfUvIndex(NodePtr node)
+{
+    if (node->getCategory() != "gltf_image" && node->getCategory() != "gltf_colorimage")
+    {
+        return;
+    }
+
+    InputPtr uvIndex = node->getInput("uvindex");
+    if (!uvIndex)
+    {
+        return;
+    }
+
+    GraphElementPtr graph = node->getParent()->asA<GraphElement>();
+    if (graph)
+    {
+        NodePtr texcoord = graph->addNode("texcoord", graph->createValidChildName(node->getName() + "_texcoord"), "vector2");
+        InputPtr index = texcoord->addInput("index", "integer");
+        index->copyContentFrom(uvIndex);
+        InputPtr texcoordInput = node->addInput("texcoord", "vector2");
+        texcoordInput->setNodeName(texcoord->getName());
+    }
+    node->removeInput("uvindex");
+}
+
+void removeLegacyLamaInputs(NodePtr node)
+{
+    // Version upgrade happens before documents import the 1.39 standard
+    // libraries, so stale LAMA interface inputs cannot be detected from
+    // the 1.39 NodeDefs at this point.
+    const string& category = node->getCategory();
+    if (category == "LamaConductor")
+    {
+        removeInputIfPresent(node, "iridescenceThickness");
+        removeInputIfPresent(node, "iridescenceIOR");
+        removeInputIfPresent(node, "exteriorIOR");
+    }
+    else if (category == "LamaDielectric")
+    {
+        removeInputIfPresent(node, "exteriorIOR");
+    }
+    else if (category == "LamaDiffuse" || category == "LamaTranslucent")
+    {
+        removeInputIfPresent(node, "lobeName");
+        removeInputIfPresent(node, "matte");
+    }
+}
+
+void removeStaleNodeInputs(NodePtr node)
+{
+    NodeDefPtr nodeDef = node->getNodeDef(EMPTY_STRING, true);
+    vector<InputPtr> inputs = node->getInputs();
+    for (InputPtr input : inputs)
+    {
+        if (!inputHasBinding(input))
+        {
+            node->removeInput(input->getName());
+            continue;
+        }
+        if (input->hasDefaultGeomPropString())
+        {
+            input->removeAttribute(Input::DEFAULT_GEOM_PROP_ATTRIBUTE);
+        }
+        if (nodeDef && !nodeDef->getActiveInput(input->getName()))
+        {
+            node->removeInput(input->getName());
+        }
+    }
+}
+
+void removeFunctionalNodeGraphInputs(NodeGraphPtr nodeGraph)
+{
+    if (!nodeGraph->getNodeDef())
+    {
+        return;
+    }
+
+    vector<InputPtr> inputs = nodeGraph->getInputs();
+    for (InputPtr input : inputs)
+    {
+        nodeGraph->removeInput(input->getName());
+    }
+}
+
+bool upgradeLegacyShaderOps(NodePtr node)
+{
+    if (node->getType() != SURFACE_SHADER_TYPE_STRING)
+    {
+        return false;
+    }
+
+    if (node->getCategory() == "add")
+    {
+        InputPtr in1 = node->getInput("in1");
+        InputPtr in2 = node->getInput("in2");
+        node->setCategory("mix");
+        if (in1)
+        {
+            in1->setName("fg");
+        }
+        if (in2)
+        {
+            in2->setName("bg");
+        }
+        if (!node->getInput("mix"))
+        {
+            node->setInputValue("mix", 0.5f);
+        }
+        return false;
+    }
+    else if (node->getCategory() == "multiply")
+    {
+        InputPtr in1 = node->getInput("in1");
+        if (!in1)
+        {
+            return false;
+        }
+
+        vector<PortElementPtr> downstreamPorts = node->getDownstreamPorts();
+        for (PortElementPtr port : downstreamPorts)
+        {
+            port->copyContentFrom(in1);
+        }
+        return true;
+    }
+    return false;
+}
+
 } // anonymous namespace
 
 void Document::upgradeVersion()
@@ -1103,6 +1248,13 @@ void Document::upgradeVersion()
             }
         }
 
+        // Remove nodegraph implementation inputs that 1.39 treats as no-ops.
+        // The nodedef remains the source of the public interface.
+        for (NodeGraphPtr nodeGraph : getNodeGraphs())
+        {
+            removeFunctionalNodeGraphInputs(nodeGraph);
+        }
+
         // Update all nodes.
         vector<NodePtr> unusedNodes;
         for (ElementPtr elem : traverseTree())
@@ -1113,6 +1265,21 @@ void Document::upgradeVersion()
                 continue;
             }
             const string& nodeCategory = node->getCategory();
+            removeLegacyLamaInputs(node);
+            migrateGltfUvIndex(node);
+            if (nodeCategory == "geompropvalue" && node->getType() == STRING_TYPE_STRING)
+            {
+                node->setCategory("geompropvalueuniform");
+                if (node->hasNodeDefString())
+                {
+                    node->setNodeDefString("ND_geompropvalueuniform_string");
+                }
+            }
+            if (upgradeLegacyShaderOps(node))
+            {
+                unusedNodes.push_back(node);
+                continue;
+            }
             if (nodeCategory == "layer")
             {
                 // Convert layering of thin_film_bsdf nodes to thin-film parameters on the affected BSDF nodes.
@@ -1430,6 +1597,7 @@ void Document::upgradeVersion()
                     }
                 }
             }
+            removeStaleNodeInputs(node);
         }
         for (NodePtr node : unusedNodes)
         {

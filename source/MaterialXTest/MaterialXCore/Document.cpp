@@ -152,6 +152,155 @@ TEST_CASE("Document version upgrade", "[document]")
     REQUIRE(doc->validate(&message));
 }
 
+TEST_CASE("Document version upgrade 1.38 validation cleanup", "[document]")
+{
+    const std::string xmlString =
+        "<?xml version=\"1.0\"?>"
+        "<materialx version=\"1.38\">"
+        "  <nodedef name=\"ND_texcoord_vector2\" node=\"texcoord\">"
+        "    <input name=\"index\" type=\"integer\" value=\"0\" />"
+        "    <output name=\"out\" type=\"vector2\" />"
+        "  </nodedef>"
+        "  <nodedef name=\"ND_gltf_image_color4\" node=\"gltf_image\">"
+        "    <input name=\"texcoord\" type=\"vector2\" />"
+        "    <output name=\"out\" type=\"color4\" />"
+        "  </nodedef>"
+        "  <nodedef name=\"ND_geompropvalueuniform_string\" node=\"geompropvalueuniform\">"
+        "    <input name=\"geomprop\" type=\"string\" value=\"\" uniform=\"true\" />"
+        "    <output name=\"out\" type=\"string\" />"
+        "  </nodedef>"
+        "  <nodedef name=\"ND_constant_float\" node=\"constant\">"
+        "    <input name=\"value\" type=\"float\" value=\"0\" />"
+        "    <output name=\"out\" type=\"float\" />"
+        "  </nodedef>"
+        "  <nodedef name=\"ND_testnode\" node=\"testnode\">"
+        "    <input name=\"kept\" type=\"float\" value=\"1\" />"
+        "    <input name=\"normal\" type=\"vector3\" defaultgeomprop=\"Nworld\" />"
+        "    <output name=\"out\" type=\"float\" />"
+        "  </nodedef>"
+        "  <nodedef name=\"ND_func\" node=\"funcnode\">"
+        "    <input name=\"file\" type=\"filename\" value=\"\" />"
+        "    <output name=\"out\" type=\"float\" />"
+        "  </nodedef>"
+        "  <nodedef name=\"ND_standard_surface\" node=\"standard_surface\">"
+        "    <output name=\"out\" type=\"surfaceshader\" />"
+        "  </nodedef>"
+        "  <nodedef name=\"ND_mix_surfaceshader\" node=\"mix\">"
+        "    <input name=\"fg\" type=\"surfaceshader\" />"
+        "    <input name=\"bg\" type=\"surfaceshader\" />"
+        "    <input name=\"mix\" type=\"float\" value=\"0.5\" />"
+        "    <output name=\"out\" type=\"surfaceshader\" />"
+        "  </nodedef>"
+        "  <nodegraph name=\"NG_func\" nodedef=\"ND_func\">"
+        "    <input name=\"file\" type=\"filename\" value=\"resources/Images/grid.png\" />"
+        "    <constant name=\"constant1\" type=\"float\">"
+        "      <input name=\"value\" type=\"float\" value=\"1\" />"
+        "    </constant>"
+        "    <output name=\"out\" type=\"float\" nodename=\"constant1\" />"
+        "  </nodegraph>"
+        "  <gltf_image name=\"image1\" type=\"color4\">"
+        "    <input name=\"uvindex\" type=\"integer\" value=\"1\" />"
+        "  </gltf_image>"
+        "  <geompropvalue name=\"stringprop\" type=\"string\">"
+        "    <input name=\"geomprop\" type=\"string\" value=\"channels\" />"
+        "  </geompropvalue>"
+        "  <testnode name=\"testnode1\" type=\"float\">"
+        "    <input name=\"kept\" type=\"float\" value=\"2\" />"
+        "    <input name=\"stale\" type=\"float\" value=\"3\" />"
+        "    <input name=\"empty\" type=\"vector3\" />"
+        "    <input name=\"normal\" type=\"vector3\" value=\"0, 0, 1\" defaultgeomprop=\"Nobject\" />"
+        "  </testnode>"
+        "  <LamaConductor name=\"lamaConductor1\" type=\"BSDF\">"
+        "    <input name=\"tint\" type=\"color3\" value=\"1, 1, 1\" />"
+        "    <input name=\"iridescenceThickness\" type=\"float\" value=\"0\" />"
+        "    <input name=\"iridescenceIOR\" type=\"float\" value=\"1.5\" />"
+        "    <input name=\"exteriorIOR\" type=\"float\" value=\"1\" />"
+        "  </LamaConductor>"
+        "  <LamaDielectric name=\"lamaDielectric1\" type=\"BSDF\">"
+        "    <input name=\"IOR\" type=\"float\" value=\"1.5\" />"
+        "    <input name=\"exteriorIOR\" type=\"float\" value=\"1\" />"
+        "  </LamaDielectric>"
+        "  <LamaDiffuse name=\"lamaDiffuse1\" type=\"BSDF\">"
+        "    <input name=\"color\" type=\"color3\" value=\"0.1, 0.2, 0.3\" />"
+        "    <input name=\"lobeName\" type=\"string\" value=\"diffuse\" />"
+        "    <input name=\"matte\" type=\"string\" value=\"\" />"
+        "  </LamaDiffuse>"
+        "  <LamaTranslucent name=\"lamaTranslucent1\" type=\"BSDF\">"
+        "    <input name=\"color\" type=\"color3\" value=\"0.1, 0.2, 0.3\" />"
+        "    <input name=\"lobeName\" type=\"string\" value=\"diffuse\" />"
+        "    <input name=\"matte\" type=\"string\" value=\"\" />"
+        "  </LamaTranslucent>"
+        "  <standard_surface name=\"surface1\" type=\"surfaceshader\" />"
+        "  <standard_surface name=\"surface2\" type=\"surfaceshader\" />"
+        "  <multiply name=\"multiply1\" type=\"surfaceshader\">"
+        "    <input name=\"in1\" type=\"surfaceshader\" nodename=\"surface1\" />"
+        "    <input name=\"in2\" type=\"float\" value=\"0.4\" />"
+        "  </multiply>"
+        "  <add name=\"add1\" type=\"surfaceshader\">"
+        "    <input name=\"in1\" type=\"surfaceshader\" nodename=\"multiply1\" />"
+        "    <input name=\"in2\" type=\"surfaceshader\" nodename=\"surface2\" />"
+        "  </add>"
+        "</materialx>";
+
+    mx::DocumentPtr doc = mx::createDocument();
+    mx::readFromXmlString(doc, xmlString);
+
+    mx::DocumentPtr library = mx::createDocument();
+    mx::NodeDefPtr conductorDef = library->addNodeDef("ND_lama_conductor", mx::BSDF_TYPE_STRING, "LamaConductor");
+    conductorDef->addInput("tint", "color3");
+    mx::NodeDefPtr dielectricDef = library->addNodeDef("ND_lama_dielectric", mx::BSDF_TYPE_STRING, "LamaDielectric");
+    dielectricDef->addInput("IOR", "float");
+    mx::NodeDefPtr diffuseDef = library->addNodeDef("ND_lama_diffuse", mx::BSDF_TYPE_STRING, "LamaDiffuse");
+    diffuseDef->addInput("color", "color3");
+    mx::NodeDefPtr translucentDef = library->addNodeDef("ND_lama_translucent", mx::BSDF_TYPE_STRING, "LamaTranslucent");
+    translucentDef->addInput("color", "color3");
+    doc->importLibrary(library);
+
+    mx::NodePtr image = doc->getNode("image1");
+    REQUIRE(image->getInput("uvindex") == nullptr);
+    REQUIRE(image->getInput("texcoord") != nullptr);
+    REQUIRE(image->getConnectedNode("texcoord")->getCategory() == "texcoord");
+
+    mx::NodePtr geomprop = doc->getNode("stringprop");
+    REQUIRE(geomprop->getCategory() == "geompropvalueuniform");
+
+    mx::NodeGraphPtr functionGraph = doc->getNodeGraph("NG_func");
+    REQUIRE(functionGraph->getInput("file") == nullptr);
+
+    mx::NodePtr testNode = doc->getNode("testnode1");
+    REQUIRE(testNode->getInput("kept") != nullptr);
+    REQUIRE(testNode->getInput("stale") == nullptr);
+    REQUIRE(testNode->getInput("empty") == nullptr);
+    REQUIRE(testNode->getInput("normal") != nullptr);
+    REQUIRE(!testNode->getInput("normal")->hasDefaultGeomPropString());
+
+    mx::NodePtr conductor = doc->getNode("lamaConductor1");
+    REQUIRE(conductor->getInput("iridescenceThickness") == nullptr);
+    REQUIRE(conductor->getInput("iridescenceIOR") == nullptr);
+    REQUIRE(conductor->getInput("exteriorIOR") == nullptr);
+
+    mx::NodePtr dielectric = doc->getNode("lamaDielectric1");
+    REQUIRE(dielectric->getInput("exteriorIOR") == nullptr);
+
+    mx::NodePtr diffuse = doc->getNode("lamaDiffuse1");
+    REQUIRE(diffuse->getInput("lobeName") == nullptr);
+    REQUIRE(diffuse->getInput("matte") == nullptr);
+
+    mx::NodePtr translucent = doc->getNode("lamaTranslucent1");
+    REQUIRE(translucent->getInput("lobeName") == nullptr);
+    REQUIRE(translucent->getInput("matte") == nullptr);
+
+    mx::NodePtr add = doc->getNode("add1");
+    REQUIRE(add->getCategory() == "mix");
+    REQUIRE(add->getInput("fg")->getNodeName() == "surface1");
+    REQUIRE(add->getInput("bg")->getNodeName() == "surface2");
+    REQUIRE(doc->getNode("multiply1") == nullptr);
+
+    std::string message;
+    INFO(message);
+    REQUIRE(doc->validate(&message));
+}
+
 TEST_CASE("Document equivalence", "[document]")
 {
     mx::DocumentPtr doc = mx::createDocument();
