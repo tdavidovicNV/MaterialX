@@ -16,6 +16,11 @@
 #include <MaterialXGenHw/HwShaderGenerator.h>
 #include <MaterialXGenShader/Util.h>
 
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cstdint>
+#include <cstring>
 #include <iostream>
 
 MATERIALX_NAMESPACE_BEGIN
@@ -24,6 +29,161 @@ namespace
 {
 
 const float PI = std::acos(-1.0f);
+
+bool matchesShaderPortName(const std::string& shaderName, const std::string& portName)
+{
+    if (shaderName == portName)
+    {
+        return true;
+    }
+    if (shaderName.size() < portName.size())
+    {
+        return false;
+    }
+    if (shaderName.compare(0, portName.size(), portName) != 0)
+    {
+        return false;
+    }
+    return std::all_of(shaderName.begin() + portName.size(), shaderName.end(), ::isdigit);
+}
+
+slang::VariableLayoutReflection* findLightDataField(slang::TypeLayoutReflection* lightDataLayout, const std::string& fieldName)
+{
+    for (unsigned int index = 0; index < lightDataLayout->getFieldCount(); ++index)
+    {
+        slang::VariableLayoutReflection* field = lightDataLayout->getFieldByIndex(index);
+        if (field && matchesShaderPortName(field->getName(), fieldName))
+        {
+            return field;
+        }
+    }
+    return nullptr;
+}
+
+void writeBytes(std::vector<uint8_t>& data, size_t offset, size_t byteSize, const void* source, size_t sourceByteSize, const std::string& fieldName)
+{
+    if (offset + byteSize > data.size())
+    {
+        throw ExceptionRenderError("Light data field " + fieldName + " is outside the structured buffer layout.");
+    }
+    if (sourceByteSize > byteSize)
+    {
+        throw ExceptionRenderError("Light data field " + fieldName + " is smaller than the MaterialX value.");
+    }
+
+    std::memset(data.data() + offset, 0, byteSize);
+    if (source && sourceByteSize)
+    {
+        std::memcpy(data.data() + offset, source, sourceByteSize);
+    }
+}
+
+template <typename T, size_t N>
+std::array<float, N> toFloatArray(const T& value)
+{
+    std::array<float, N> result;
+    for (size_t index = 0; index < N; ++index)
+    {
+        result[index] = value[index];
+    }
+    return result;
+}
+
+void writeLightValue(std::vector<uint8_t>& data, size_t offset, size_t byteSize, ConstValuePtr value, const std::string& fieldName)
+{
+    if (!value)
+    {
+        writeBytes(data, offset, byteSize, nullptr, 0, fieldName);
+        return;
+    }
+
+    const std::string& typeString = value->getTypeString();
+    if (typeString == Type::FLOAT.getName())
+    {
+        const float typedValue = value->asA<float>();
+        writeBytes(data, offset, byteSize, &typedValue, sizeof(typedValue), fieldName);
+    }
+    else if (typeString == Type::INTEGER.getName())
+    {
+        const int32_t typedValue = int32_t(value->asA<int>());
+        writeBytes(data, offset, byteSize, &typedValue, sizeof(typedValue), fieldName);
+    }
+    else if (typeString == Type::BOOLEAN.getName())
+    {
+        if (byteSize == 1)
+        {
+            const int8_t typedValue = value->asA<bool>() ? 1 : 0;
+            writeBytes(data, offset, byteSize, &typedValue, sizeof(typedValue), fieldName);
+        }
+        else if (byteSize == 2)
+        {
+            const int16_t typedValue = value->asA<bool>() ? 1 : 0;
+            writeBytes(data, offset, byteSize, &typedValue, sizeof(typedValue), fieldName);
+        }
+        else if (byteSize >= 4)
+        {
+            const int32_t typedValue = value->asA<bool>() ? 1 : 0;
+            writeBytes(data, offset, byteSize, &typedValue, sizeof(typedValue), fieldName);
+        }
+        else
+        {
+            throw ExceptionRenderError("Unsupported boolean size " + std::to_string(byteSize) + "B.");
+        }
+    }
+    else if (typeString == Type::COLOR3.getName())
+    {
+        const auto typedValue = toFloatArray<Color3, 3>(value->asA<Color3>());
+        writeBytes(data, offset, byteSize, typedValue.data(), typedValue.size() * sizeof(float), fieldName);
+    }
+    else if (typeString == Type::COLOR4.getName())
+    {
+        const auto typedValue = toFloatArray<Color4, 4>(value->asA<Color4>());
+        writeBytes(data, offset, byteSize, typedValue.data(), typedValue.size() * sizeof(float), fieldName);
+    }
+    else if (typeString == Type::VECTOR2.getName())
+    {
+        const auto typedValue = toFloatArray<Vector2, 2>(value->asA<Vector2>());
+        writeBytes(data, offset, byteSize, typedValue.data(), typedValue.size() * sizeof(float), fieldName);
+    }
+    else if (typeString == Type::VECTOR3.getName())
+    {
+        const auto typedValue = toFloatArray<Vector3, 3>(value->asA<Vector3>());
+        writeBytes(data, offset, byteSize, typedValue.data(), typedValue.size() * sizeof(float), fieldName);
+    }
+    else if (typeString == Type::VECTOR4.getName())
+    {
+        const auto typedValue = toFloatArray<Vector4, 4>(value->asA<Vector4>());
+        writeBytes(data, offset, byteSize, typedValue.data(), typedValue.size() * sizeof(float), fieldName);
+    }
+    else
+    {
+        throw ExceptionRenderError("Unsupported light data type `" + typeString + "` for field " + fieldName);
+    }
+}
+
+void writeLightField(
+    std::vector<uint8_t>& data,
+    size_t elementSize,
+    size_t lightIndex,
+    slang::TypeLayoutReflection* lightDataLayout,
+    const std::string& fieldName,
+    ConstValuePtr value)
+{
+    slang::VariableLayoutReflection* field = findLightDataField(lightDataLayout, fieldName);
+    if (!field)
+    {
+        return;
+    }
+
+    slang::TypeLayoutReflection* fieldType = field->getTypeLayout();
+    if (!fieldType)
+    {
+        return;
+    }
+
+    const size_t offset = lightIndex * elementSize + size_t(field->getOffset());
+    writeLightValue(data, offset, fieldType->getSize(), value, fieldName);
+}
 
 } // anonymous namespace
 
@@ -262,6 +422,7 @@ void SlangProgram::clearBuiltData()
     _vertexInputsList.clear();
     _pipelines.clear();
     _rootObject = {};
+    _lightDataBuffer = {};
     _explicitBoundImages = {};
     _inputLayout = {};
     // Must be cleared, because we might have converted the mesh data
@@ -594,6 +755,103 @@ void SlangProgram::bindTexture(ImageHandlerPtr imageHandler,
     }
 }
 
+bool SlangProgram::bindStructuredLightData(LightHandlerPtr lightHandler, const LightIdMap& idMap, int lightCount)
+{
+    rhi::ShaderCursor rootCursor(_rootObject);
+    rhi::ShaderCursor lightDataCursor = rootCursor[HW::LIGHT_DATA_INSTANCE.c_str()];
+    if (!lightDataCursor.isValid() || !lightDataCursor.m_typeLayout)
+    {
+        return false;
+    }
+
+    slang::TypeLayoutReflection* lightDataLayout = lightDataCursor.m_typeLayout->getElementTypeLayout();
+    if (!lightDataLayout)
+    {
+        return false;
+    }
+
+    const size_t elementSize = lightDataLayout->getSize();
+    if (!elementSize)
+    {
+        throw ExceptionRenderError("Structured LightData has zero byte size.");
+    }
+
+    const size_t bufferLightCount = std::max<size_t>(1, size_t(std::max(lightCount, 0)));
+    std::vector<uint8_t> lightDataBytes(bufferLightCount * elementSize, 0);
+
+    const VariableBlock& lightDataDefaults = _shader->getStage(Stage::PIXEL).getUniformBlock(HW::LIGHT_DATA);
+    const std::string lightTypeFieldName = lightDataDefaults.size() ? lightDataDefaults[0]->getName() : "type";
+    for (size_t lightIndex = 0; lightIndex < bufferLightCount; ++lightIndex)
+    {
+        for (size_t portIndex = 0; portIndex < lightDataDefaults.size(); ++portIndex)
+        {
+            auto shaderPort = lightDataDefaults[portIndex];
+            writeLightField(lightDataBytes, elementSize, lightIndex, lightDataLayout, shaderPort->getName(), shaderPort->getValue());
+        }
+    }
+
+    size_t lightIndex = 0;
+    for (NodePtr light : lightHandler->getLightSources())
+    {
+        if (lightIndex >= size_t(std::max(lightCount, 0)))
+        {
+            break;
+        }
+
+        auto nodeDef = light->getNodeDef();
+        if (!nodeDef)
+        {
+            continue;
+        }
+
+        auto idIt = idMap.find(nodeDef->getName());
+        if (idIt != idMap.end())
+        {
+            writeLightField(lightDataBytes, elementSize, lightIndex, lightDataLayout, lightTypeFieldName, Value::createValue((int) idIt->second));
+        }
+
+        for (const auto& input : light->getInputs())
+        {
+            if (!input->hasValue())
+            {
+                continue;
+            }
+
+            if (input->getName() == "direction" && input->getValue()->isA<Vector3>())
+            {
+                Vector3 dir = input->getValue()->asA<Vector3>();
+                dir = lightHandler->getLightTransform().transformVector(dir);
+                writeLightField(lightDataBytes, elementSize, lightIndex, lightDataLayout, input->getName(), Value::createValue(dir));
+            }
+            else
+            {
+                writeLightField(lightDataBytes, elementSize, lightIndex, lightDataLayout, input->getName(), input->getValue());
+            }
+        }
+
+        ++lightIndex;
+    }
+
+    rhi::BufferDesc bufferDesc = {};
+    bufferDesc.size = lightDataBytes.size();
+    bufferDesc.elementSize = uint32_t(elementSize);
+    bufferDesc.usage = rhi::BufferUsage::ShaderResource;
+    bufferDesc.defaultState = rhi::ResourceState::ShaderResource;
+    bufferDesc.label = "MaterialX LightData";
+    _lightDataBuffer = _context->getDevice()->createBuffer(bufferDesc, lightDataBytes.data());
+    if (!_lightDataBuffer)
+    {
+        throw ExceptionRenderError("Failed to create structured LightData buffer.");
+    }
+
+    if (SLANG_FAILED(lightDataCursor.setBinding(_lightDataBuffer)))
+    {
+        throw ExceptionRenderError("Failed to bind structured LightData buffer.");
+    }
+
+    return true;
+}
+
 void SlangProgram::bindLighting(LightHandlerPtr lightHandler, ImageHandlerPtr imageHandler)
 {
     if (!lightHandler)
@@ -668,49 +926,52 @@ void SlangProgram::bindLighting(LightHandlerPtr lightHandler, ImageHandlerPtr im
         int lightCount = lightHandler->getDirectLighting() ? (int) lightHandler->getLightSources().size() : 0;
         bindUniform(HW::NUM_ACTIVE_LIGHT_SOURCES, Value::createValue(lightCount));
         LightIdMap idMap = lightHandler->computeLightIdMap(lightHandler->getLightSources());
-        size_t index = 0;
-        for (NodePtr light : lightHandler->getLightSources())
+        if (!bindStructuredLightData(lightHandler, idMap, lightCount))
         {
-            auto nodeDef = light->getNodeDef();
-            if (!nodeDef)
+            size_t index = 0;
+            for (NodePtr light : lightHandler->getLightSources())
             {
-                continue;
-            }
-
-            const std::string prefix = HW::LIGHT_DATA_INSTANCE + "[" + std::to_string(index) + "]";
-
-            // Set light type id
-            std::string lightType(prefix + ".type");
-            if (hasUniform(lightType))
-            {
-                unsigned int lightTypeValue = idMap[nodeDef->getName()];
-                bindUniform(lightType, Value::createValue((int) lightTypeValue));
-            }
-
-            // Set all inputs
-            for (const auto& input : light->getInputs())
-            {
-                // Make sure we have a value to set
-                if (input->hasValue())
+                auto nodeDef = light->getNodeDef();
+                if (!nodeDef)
                 {
-                    std::string inputName(prefix + "." + input->getName());
-                    if (hasUniform(inputName))
+                    continue;
+                }
+
+                const std::string prefix = HW::LIGHT_DATA_INSTANCE + "[" + std::to_string(index) + "]";
+
+                // Set light type id
+                std::string lightType(prefix + ".type");
+                if (hasUniform(lightType))
+                {
+                    unsigned int lightTypeValue = idMap[nodeDef->getName()];
+                    bindUniform(lightType, Value::createValue((int) lightTypeValue));
+                }
+
+                // Set all inputs
+                for (const auto& input : light->getInputs())
+                {
+                    // Make sure we have a value to set
+                    if (input->hasValue())
                     {
-                        if (input->getName() == "direction" && input->hasValue() && input->getValue()->isA<Vector3>())
+                        std::string inputName(prefix + "." + input->getName());
+                        if (hasUniform(inputName))
                         {
-                            Vector3 dir = input->getValue()->asA<Vector3>();
-                            dir = lightHandler->getLightTransform().transformVector(dir);
-                            bindUniform(inputName, Value::createValue(dir));
-                        }
-                        else
-                        {
-                            bindUniform(inputName, input->getValue());
+                            if (input->getName() == "direction" && input->hasValue() && input->getValue()->isA<Vector3>())
+                            {
+                                Vector3 dir = input->getValue()->asA<Vector3>();
+                                dir = lightHandler->getLightTransform().transformVector(dir);
+                                bindUniform(inputName, Value::createValue(dir));
+                            }
+                            else
+                            {
+                                bindUniform(inputName, input->getValue());
+                            }
                         }
                     }
                 }
-            }
 
-            ++index;
+                ++index;
+            }
         }
     }
 

@@ -64,7 +64,7 @@ Uniform variables :
     $numActiveLightSources              u_numActiveLightSources             int        The number of currently active light sources. Note that in shader this is clamped against
                                                                                        the maximum allowed number of lights sources. The maximum number is set by the generation
                                                                                        option GenOptions.hwMaxActiveLightSources.
-    $lightData[]                        u_lightData[]                       struct     Array of struct LightData holding parameters for active light sources.
+    $lightData[]                        u_lightData[]                       struct     Buffer of struct LightData holding parameters for active light sources.
                                                                                        The LightData struct is built dynamically depending on requirements for
                                                                                        bound light shaders.
     $envMatrix                          u_envMatrix                         mat4       Rotation matrix for the environment.

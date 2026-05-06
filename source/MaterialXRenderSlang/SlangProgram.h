@@ -227,6 +227,7 @@ class SlangProgram
     {
         return (bool) _rootObject;
     }
+    bool bindStructuredLightData(LightHandlerPtr lightHandler, const LightIdMap& idMap, int lightCount);
     void bindUniformGeomprops(MeshPtr mesh);
 
     const VertexInputMap& updateVertexInputList();
@@ -254,6 +255,7 @@ class SlangProgram
     ShaderPtr _shader;
     slang::ProgramLayout* _slangReflection;
     rhi::ComPtr<rhi::IShaderProgram> _shaderProgram;
+    rhi::ComPtr<rhi::IBuffer> _lightDataBuffer;
     VertexInputMap _vertexInputsList;
     UniformInputMap _uniformList;
 

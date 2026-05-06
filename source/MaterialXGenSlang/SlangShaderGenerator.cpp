@@ -350,16 +350,15 @@ void SlangShaderGenerator::emitUniforms(GenContext& context, ShaderStage& stage,
         }
     }
 
+    emitScopeEnd(stage);
+    emitLineBreak(stage);
+
     if (emitLighting)
     {
         const VariableBlock& lightData = stage.getUniformBlock(HW::LIGHT_DATA);
-        const string structArraySuffix = "[" + HW::LIGHT_DATA_MAX_LIGHT_SOURCES + "]";
-        const string structName = lightData.getInstance();
-        emitLine("uniform " + lightData.getName() + " " + structName + structArraySuffix, stage);
+        emitLine("StructuredBuffer<" + lightData.getName() + "> " + lightData.getInstance(), stage);
+        emitLineBreak(stage);
     }
-
-    emitScopeEnd(stage);
-    emitLineBreak(stage);
 }
 
 void SlangShaderGenerator::emitInputs(GenContext& context, ShaderStage& stage) const
