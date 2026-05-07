@@ -15,10 +15,12 @@
 
 #include <MaterialXRender/ImageHandler.h>
 #include <MaterialXRender/ShaderRenderer.h>
+#include <MaterialXFormat/File.h>
 
 #include <iostream>
 #include <optional>
 #include <memory>
+#include <string>
 
 MATERIALX_NAMESPACE_BEGIN
 
@@ -26,13 +28,22 @@ using SlangContextPtr = std::shared_ptr<class SlangContext>;
 using SlangBlitPtr = std::shared_ptr<class SlangBlit>;
 class SlangShaderCache;
 
+struct SlangContextOptions
+{
+    std::string deviceType = "Default";
+    std::optional<FilePath> shaderCachePath;
+    std::optional<FilePath> moduleCachePath;
+};
+
 class SlangContext
 {
   public:
     SlangContext(std::string_view deviceType = "Default");
+    SlangContext(const SlangContextOptions& options);
     ~SlangContext();
 
     static SlangContextPtr create(std::string_view deviceType = "Default");
+    static SlangContextPtr create(const SlangContextOptions& options);
 
     const rhi::ComPtr<rhi::IDevice>& getDevice() { return _device; }
 

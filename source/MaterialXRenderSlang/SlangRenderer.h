@@ -11,10 +11,13 @@
 
 #include <MaterialXRenderSlang/Export.h>
 
+#include <MaterialXRenderSlang/SlangContext.h>
 #include <MaterialXRenderSlang/SlangProgram.h>
 
 #include <MaterialXRender/ImageHandler.h>
 #include <MaterialXRender/ShaderRenderer.h>
+
+#include <optional>
 
 MATERIALX_NAMESPACE_BEGIN
 
@@ -33,6 +36,11 @@ class MX_RENDERSLANG_API SlangRenderer : public ShaderRenderer
   public:
     /// Create an Slang renderer instance
     static SlangRendererPtr create(unsigned int width = 512, unsigned int height = 512, Image::BaseType baseType = Image::BaseType::UINT8);
+    static SlangRendererPtr create(
+        const SlangContextOptions& contextOptions,
+        unsigned int width = 512,
+        unsigned int height = 512,
+        Image::BaseType baseType = Image::BaseType::UINT8);
 
     /// Destructor
     virtual ~SlangRenderer();
@@ -106,6 +114,7 @@ class MX_RENDERSLANG_API SlangRenderer : public ShaderRenderer
   protected:
     /// Constructor
     SlangRenderer(unsigned int width, unsigned int height, Image::BaseType baseType);
+    SlangRenderer(const SlangContextOptions& contextOptions, unsigned int width, unsigned int height, Image::BaseType baseType);
 
     void createFrameBuffer(bool encodeSrgb);
 
@@ -115,6 +124,7 @@ class MX_RENDERSLANG_API SlangRenderer : public ShaderRenderer
     bool _initialized;
 
     SlangContextPtr _context;
+    std::optional<SlangContextOptions> _contextOptions;
     SimpleWindowPtr _window;
     SlangProgramPtr _program;
     SlangFramebufferPtr _framebuffer;

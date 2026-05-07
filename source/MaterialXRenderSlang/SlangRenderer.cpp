@@ -33,6 +33,15 @@ SlangRendererPtr SlangRenderer::create(unsigned int width, unsigned int height, 
     return std::shared_ptr<SlangRenderer>(new SlangRenderer(width, height, baseType));
 }
 
+SlangRendererPtr SlangRenderer::create(
+    const SlangContextOptions& contextOptions,
+    unsigned int width,
+    unsigned int height,
+    Image::BaseType baseType)
+{
+    return std::shared_ptr<SlangRenderer>(new SlangRenderer(contextOptions, width, height, baseType));
+}
+
 SlangRenderer::SlangRenderer(unsigned int width, unsigned int height, Image::BaseType baseType) :
     ShaderRenderer(width, height, baseType),
     _initialized(false),
@@ -41,6 +50,16 @@ SlangRenderer::SlangRenderer(unsigned int width, unsigned int height, Image::Bas
     _geometryHandler = GeometryHandler::create();
     _geometryHandler->addLoader(TinyObjLoader::create());
     _geometryHandler->addLoader(CgltfLoader::create());
+}
+
+SlangRenderer::SlangRenderer(
+    const SlangContextOptions& contextOptions,
+    unsigned int width,
+    unsigned int height,
+    Image::BaseType baseType) :
+    SlangRenderer(width, height, baseType)
+{
+    _contextOptions = contextOptions;
 }
 
 void SlangRenderer::initialize(RenderContextHandle renderContextHandle)
@@ -57,7 +76,16 @@ void SlangRenderer::initialize(RenderContextHandle renderContextHandle)
             throw ExceptionRenderError("Failed to initialize renderer window");
         }
 
-        if (renderContextHandle)
+        if (_contextOptions)
+        {
+            SlangContextOptions options = *_contextOptions;
+            if (renderContextHandle)
+            {
+                options.deviceType = (const char*) renderContextHandle;
+            }
+            _context = SlangContext::create(options);
+        }
+        else if (renderContextHandle)
             _context = SlangContext::create((const char*)renderContextHandle);
         else
             _context = SlangContext::create();

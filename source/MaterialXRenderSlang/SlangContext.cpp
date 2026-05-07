@@ -21,41 +21,71 @@
 
 MATERIALX_NAMESPACE_BEGIN
 
-SlangContext::SlangContext(std::string_view deviceType)
+namespace
+{
+
+rhi::DeviceType getDeviceType(std::string_view deviceType)
 {
     using namespace rhi;
+
+    if (deviceType == "Default")
+    {
+        return DeviceType::Default;
+    }
+    if (deviceType == "D3D12")
+    {
+        return DeviceType::D3D12;
+    }
+    if (deviceType == "Vulkan")
+    {
+        return DeviceType::Vulkan;
+    }
+    if (deviceType == "Metal")
+    {
+        return DeviceType::Metal;
+    }
+    if (deviceType == "WGPU")
+    {
+        return DeviceType::WGPU;
+    }
+    throw ExceptionRenderError("Unknown deviceType request: " + std::string(deviceType));
+}
+
+SlangContextOptions makeDefaultContextOptions(std::string_view deviceType)
+{
+    SlangContextOptions options;
+    options.deviceType = std::string(deviceType);
+    options.shaderCachePath = FilePath("./shadercache");
+    return options;
+}
+
+} // namespace
+
+SlangContext::SlangContext(std::string_view deviceType) :
+    SlangContext(makeDefaultContextOptions(deviceType))
+{
+}
+
+SlangContext::SlangContext(const SlangContextOptions& options)
+{
+    using namespace rhi;
+
+    if (options.moduleCachePath)
+    {
+        throw ExceptionRenderError("Slang module cache is not yet implemented in RenderSlang.");
+    }
 
     rhi::getRHI()->enableDebugLayers();
     slang::createGlobalSession(&_slangGlobalSession);
 
     _debugCallback = std::make_unique<SlangDebugCallback>();
-    _shaderCache = new SlangShaderCache("./shadercache");
+    if (options.shaderCachePath)
+    {
+        _shaderCache = new SlangShaderCache(*options.shaderCachePath);
+    }
 
     DeviceDesc deviceDesc = {};
-    if (deviceType == "Default")
-    {
-        deviceDesc.deviceType = DeviceType::Default;
-    }
-    else if (deviceType == "D3D12")
-    {
-        deviceDesc.deviceType = DeviceType::D3D12;
-    }
-    else if (deviceType == "Vulkan")
-    {
-        deviceDesc.deviceType = DeviceType::Vulkan;
-    }
-    else if (deviceType == "Metal")
-    {
-        deviceDesc.deviceType = DeviceType::Metal;
-    }
-    else if (deviceType == "WGPU")
-    {
-        deviceDesc.deviceType = DeviceType::WGPU;
-    }
-    else
-    {
-        throw ExceptionRenderError("Unknown deviceType request: " + std::string(deviceType));
-    }
+    deviceDesc.deviceType = getDeviceType(options.deviceType);
 
     std::vector<const char*> searchPaths;
     std::vector<slang::PreprocessorMacroDesc> preprocessorMacros;
@@ -75,6 +105,7 @@ SlangContext::SlangContext(std::string_view deviceType)
     deviceDesc.slang.compilerOptionEntryCount = (uint32_t) compilerOptions.size();
     deviceDesc.debugCallback = _debugCallback.get();
     deviceDesc.persistentShaderCache = _shaderCache.get();
+    deviceDesc.persistentPipelineCache = _shaderCache.get();
 
 #ifdef _DEBUG
     deviceDesc.enableValidation = true;
@@ -95,6 +126,11 @@ SlangContext::~SlangContext()
 SlangContextPtr SlangContext::create(std::string_view deviceType)
 {
     return std::make_shared<SlangContext>(deviceType);
+}
+
+SlangContextPtr SlangContext::create(const SlangContextOptions& options)
+{
+    return std::make_shared<SlangContext>(options);
 }
 
 MATERIALX_NAMESPACE_END
