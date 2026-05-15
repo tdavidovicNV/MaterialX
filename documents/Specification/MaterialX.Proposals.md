@@ -394,6 +394,14 @@ Output the RGB and alpha channels of a color4 as separate outputs.
 
 # Proposals: PBR Nodes<a id="propose-pbr-nodes"></a>
 
+### Unit-Length Normal Inputs
+
+PBR distribution functions should interpret their `normal` inputs as unit-length direction vectors in the declared coordinate space. This clarifies the existing convention used by geometric normal nodes, bump nodes, and normal-map nodes, and avoids renderer-dependent behavior when a material provides a constant or computed normal that is not unit length.
+
+This requirement follows from the math used by BSDF and EDF nodes: dot products with the normal are evaluated as cosines, microfacet distributions construct local shading frames from the normal, and sampling PDFs are defined over unit hemispheres or spheres. A non-unit normal can therefore change energy, sampling density, and reflected or transmitted directions in ways that are not portable across shading languages or renderer implementations.
+
+Implementations may normalize nonzero normal inputs before evaluating PBR distribution functions. Materials and examples should author constant normal values with unit length, and a zero-length normal should be considered invalid.
+
 
 
 <p>&nbsp;<p><hr><p>
