@@ -150,6 +150,53 @@ TEST_CASE("Document version upgrade", "[document]")
     std::string message;
     INFO(message);
     REQUIRE(doc->validate(&message));
+
+    const std::string normalMapXmlString =
+        "<?xml version=\"1.0\"?>"
+        "<materialx version=\"1.38\">"
+        "  <normal name=\"N_normal\" type=\"vector3\" />"
+        "  <normalmap name=\"N_value_only_normalmap\" type=\"vector3\" nodedef=\"ND_normalmap\">"
+        "    <input name=\"space\" type=\"string\" value=\"tangent\" />"
+        "    <input name=\"normal\" type=\"vector3\" value=\"0, 0, 0\" />"
+        "    <input name=\"tangent\" type=\"vector3\" value=\"0, 0, 0\" />"
+        "    <input name=\"bitangent\" type=\"vector3\" value=\"0, 0, 0\" />"
+        "  </normalmap>"
+        "  <normalmap name=\"N_connected_normalmap\" type=\"vector3\" nodedef=\"ND_normalmap\">"
+        "    <input name=\"space\" type=\"string\" value=\"tangent\" />"
+        "    <input name=\"normal\" type=\"vector3\" nodename=\"N_normal\" />"
+        "    <input name=\"tangent\" type=\"vector3\" value=\"0, 0, 0\" />"
+        "  </normalmap>"
+        "</materialx>";
+
+    doc = mx::createDocument();
+    mx::readFromXmlString(doc, normalMapXmlString);
+
+    mx::NodePtr valueOnlyNormalMap = doc->getNode("N_value_only_normalmap");
+    REQUIRE(valueOnlyNormalMap);
+    REQUIRE(valueOnlyNormalMap->getNodeDefString() == "ND_normalmap_float");
+    REQUIRE(!valueOnlyNormalMap->getInput("space"));
+    REQUIRE(!valueOnlyNormalMap->getInput("normal"));
+    REQUIRE(!valueOnlyNormalMap->getInput("tangent"));
+    REQUIRE(!valueOnlyNormalMap->getInput("bitangent"));
+
+    mx::NodePtr connectedNormalMap = doc->getNode("N_connected_normalmap");
+    REQUIRE(connectedNormalMap);
+    REQUIRE(connectedNormalMap->getInput("normal"));
+    REQUIRE(connectedNormalMap->getInput("normal")->getNodeName() == "N_normal");
+    REQUIRE(!connectedNormalMap->getInput("tangent"));
+    REQUIRE(connectedNormalMap->getInput("bitangent"));
+
+    mx::NodePtr bitangentNode = connectedNormalMap->getInput("bitangent")->getConnectedNode();
+    REQUIRE(bitangentNode);
+    REQUIRE(bitangentNode->getCategory() == "normalize");
+    mx::NodePtr crossNode = bitangentNode->getInput("in")->getConnectedNode();
+    REQUIRE(crossNode);
+    REQUIRE(crossNode->getCategory() == "crossproduct");
+    REQUIRE(crossNode->getInput("in1")->getNodeName() == "N_normal");
+    mx::NodePtr tangentNode = crossNode->getInput("in2")->getConnectedNode();
+    REQUIRE(tangentNode);
+    REQUIRE(tangentNode->getCategory() == "tangent");
+    REQUIRE(tangentNode->getInput("space")->getValueString() == "world");
 }
 
 TEST_CASE("Document equivalence", "[document]")
