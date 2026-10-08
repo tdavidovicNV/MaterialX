@@ -1,0 +1,6 @@
+Baseline focused tests: 207 assertions in 6 test cases passed.
+Each isolated candidate and combined: 207 assertions in 6 test cases passed.
+Combined full configured suite: 26844 assertions in 97 test cases passed.
+GLSL source comparisons: all four files byte-identical for each candidate.
+Complete reproduction script: all six variants rebuilt and validated successfully.
+All 880 benchmark-row checksums agree per workload across variants.

@@ -1,0 +1,75 @@
+MaterialX CPU hot paths: results, 2026-10-08
+
+All four proposed optimizations remain applicable on current upstream main
+d07921060b8f44cd2eac963b08c608d7fdb9fec6 (1.39.6 development).
+Combined production commit: 3806b06b7a7813f257945d563869b9dbc27bbddd.
+
+Independent API microbenchmarks
+
+Each row compares only the named optimization against the same upstream source.
+Eight interleaved paired samples; 100000 operations/sample; time in ns/op.
+The reduction is the median of paired reductions, not the ratio of the medians.
+
+Optimization / operation           Baseline   Candidate   Reduction   Pair range
+Reserved set / ordinary name        411.696     133.260      67.59%    65.90..68.39%
+Reserved set / reserved name         132.051      50.328      61.66%    60.81..62.86%
+Target / single hit                  230.566      15.784      93.17%    92.31..93.78%
+Target / single miss                 194.861      14.583      92.59%    92.16..93.23%
+Target / list hit                    373.801     283.418      24.12%    18.34..25.82%
+Duplicate query / node definition   2268.845    2100.310       7.68%     6.11.. 8.76%
+Duplicate query / implementation     607.812     357.511      41.32%    39.92..46.70%
+Inheritance / 16 ordinary inputs    1783.865     703.220      60.31%    59.30..61.57%
+Inheritance / 1 ordinary output      716.130     458.508      35.58%    32.45..40.03%
+
+Fresh-context construction and GLSL generation
+
+Eight interleaved pairs; 150 generations/material/sample; medians in ms/request.
+Includes fresh document/node/material/context construction, generation and
+destruction, with libraries loaded outside timing. See README.txt for boundaries.
+
+Variant      Material          Baseline Candidate Reduction   Pair range
+Reserved     standard_surface   6.7601   6.6732      3.55%    -22.88..10.96%
+Reserved     OpenPBR            7.9900   7.7015      2.28%    -18.51..10.80%
+Targets      standard_surface   6.7405   6.6269      1.98%     -3.56..11.53%
+Targets      OpenPBR            8.0675   7.9482      1.97%     -5.87..12.97%
+Lookup       standard_surface   6.7248   6.6495      0.95%     -8.70.. 7.92%
+Lookup       OpenPBR            7.8997   7.9152     -2.35%     -8.82.. 7.41%
+Interfaces   standard_surface   6.6155   6.3554      3.21%    -14.87..11.06%
+Interfaces   OpenPBR            7.7446   7.4588      5.05%     -2.89.. 8.53%
+Combined     standard_surface   6.7731   6.0541     11.02%      1.07..21.94%
+Combined     OpenPBR            7.8554   7.0655     10.16%      7.33..22.10%
+
+Individual generation results are inconclusive: their paired ranges all cross
+zero, including the negative median for lookup/OpenPBR. All eight combined pairs
+improved for each material. The combined median is evidence for this standalone
+workload on this machine, not a consumer application prediction. Microbenchmark
+gains are clear but cannot be added together to estimate end-to-end performance.
+No outliers were discarded. Raw samples are in timings.csv (880 rows).
+
+Validation
+
+Focused baseline, each independent variant and combined: 207 assertions / 6 cases.
+Combined full configured suite: 26844 assertions / 97 cases, all passed.
+GLSL vertex/pixel sources for standard_surface and OpenPBR are byte-identical
+between baseline and every candidate. All timing checksums also agree.
+All builds/tests use the MSVC optimized Release configuration documented in
+README.txt. The full suite covers enabled GLSL/Slang/OSL/MDL/MSL generators, with
+rendering disabled. No GPU execution or downstream shader compiler validation.
+
+Profiling
+
+VTune 2026.4 software hotspots collection succeeded with usable MaterialX symbols
+and user call stacks. The baseline call tree confirms all four reported functions
+are exercised. The hottest self-time rows include ifstream construction (5.295 s),
+GetFileAttributesA (2.532 s), malloc (1.602 s), and std::find (0.386 s). This profile
+includes 1500 generations of each material and library setup; it is diagnostic,
+not the timed comparison. A matching combined profile is supplied separately.
+Large shader-source I/O costs help explain why isolated generation changes are
+harder to resolve than their targeted API microbenchmarks. No source-I/O or other
+out-of-scope changes were made.
+
+Delivery
+
+One upstream PR with four independently reviewable commits, each with tests.
+The optional reproduction harness, raw timings, summaries and provenance are on
+the fork-only perf/cpu-hot-paths-evidence branch, not in the upstream code diff.
